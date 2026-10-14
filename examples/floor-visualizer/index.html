@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Wizualizator podłóg</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="logo" aria-hidden="true"></span>Wizualizator podłóg</div>
+    <ol class="steps" id="steps" aria-label="Etapy">
+      <li data-step="photo">Zdjęcie</li>
+      <li data-step="floor">Podłoga</li>
+      <li data-step="perspective">Perspektywa</li>
+      <li data-step="design">Aranżacja</li>
+    </ol>
+    <button class="btn ghost" id="btnNew" hidden>Nowe zdjęcie</button>
+  </header>
+
+  <!-- Ekran startowy -->
+  <main id="welcome" class="welcome">
+    <section class="hero">
+      <h1>Zobacz nowe panele w swoim wnętrzu</h1>
+      <p>Prześlij zdjęcie pokoju — wykryjemy podłogę, a potem porównasz panele, ułożenie, kolory ścian i drzwi.</p>
+      <label class="dropzone" id="dropzone" tabindex="0">
+        <input type="file" id="fileInput" accept="image/*,.heic,.heif" hidden>
+        <strong>Przeciągnij zdjęcie tutaj</strong>
+        <span>lub kliknij, aby wybrać plik (JPG, PNG, WebP, HEIC*) · możesz też wkleić Ctrl+V</span>
+      </label>
+      <div class="hero-actions">
+        <label class="btn primary">
+          <input type="file" id="cameraInput" accept="image/*" capture="environment" hidden>
+          Zrób zdjęcie telefonem
+        </label>
+        <button class="btn" id="btnWebcam">Użyj kamery</button>
+        <button class="btn" id="btnDemo">Wypróbuj na przykładowym pokoju</button>
+      </div>
+      <ul class="tips">
+        <li>Fotografuj z wysokości oczu, lekko w dół — podłoga powinna zajmować ⅓ kadru lub więcej.</li>
+        <li>Zapal światło lub fotografuj w dzień; unikaj ostrego słońca na podłodze.</li>
+        <li>Trzymaj aparat poziomo, bez szerokokątnego „0,5×”.</li>
+      </ul>
+      <p class="disclaimer">Wizualizacja ma charakter poglądowy: kolory, faktury i skala mogą różnić się od rzeczywistych produktów. Przed zakupem obejrzyj próbkę.</p>
+    </section>
+    <section class="projects" id="projectsSection" hidden>
+      <h2>Zapisane projekty</h2>
+      <ul id="projectList" class="project-list"></ul>
+    </section>
+  </main>
+
+  <!-- Studio -->
+  <main id="studio" class="studio" hidden>
+    <section class="stage-wrap">
+      <div class="toolbar" role="toolbar" aria-label="Narzędzia">
+        <button class="icon-btn" id="btnUndo" title="Cofnij (Ctrl+Z)" aria-label="Cofnij">↶</button>
+        <button class="icon-btn" id="btnRedo" title="Ponów (Ctrl+Shift+Z)" aria-label="Ponów">↷</button>
+        <button class="btn small ghost" id="btnReset" title="Przywróć aranżację do stanu początkowego">Resetuj</button>
+        <span class="sep"></span>
+        <div class="segmented" role="group" aria-label="Widok">
+          <button id="viewAfter" aria-pressed="true">Po</button>
+          <button id="viewBefore" aria-pressed="false">Przed</button>
+        </div>
+        <button class="btn small" id="btnSplit" aria-pressed="false" title="Porównanie suwakiem">⇆ Suwak</button>
+        <select id="splitLeft" class="small-select" hidden aria-label="Lewa strona suwaka"></select>
+        <span class="spacer"></span>
+        <button class="btn small" id="btnSave">Zapisz</button>
+        <details class="menu" id="exportMenu">
+          <summary class="btn small">Eksport ▾</summary>
+          <div class="menu-list">
+            <button data-export="current">Obraz JPG</button>
+            <button data-export="png">Obraz PNG (bez strat)</button>
+            <button data-export="beforeafter">Przed i po (obok siebie)</button>
+            <button data-export="share">Udostępnij…</button>
+          </div>
+        </details>
+      </div>
+      <div class="banner" id="banner" hidden role="region" aria-live="polite">
+        <p id="bannerText"></p>
+        <div class="banner-actions" id="bannerActions"></div>
+      </div>
+      <div class="stage" id="stage">
+        <div class="stage-inner" id="stageInner">
+          <canvas id="gl" aria-label="Podgląd pomieszczenia" role="img"></canvas>
+          <canvas id="overlay"></canvas>
+          <input type="range" id="splitRange" class="split-range" min="0" max="1" step="0.001" value="0.5" hidden aria-label="Położenie suwaka porównania">
+          <span class="corner-tag" id="cornerTag" hidden>Przed</span>
+        </div>
+      </div>
+      <div class="statusbar" id="status" aria-live="polite"></div>
+    </section>
+
+    <aside class="sidebar">
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="catalog" aria-selected="true">Panele</button>
+        <button role="tab" data-tab="layout">Ułożenie</button>
+        <button role="tab" data-tab="interior">Wnętrze</button>
+        <button role="tab" data-tab="areas">Obszary</button>
+        <button role="tab" data-tab="variants">Warianty</button>
+      </nav>
+
+      <div class="panel" data-panel="catalog" role="tabpanel">
+        <div id="catalogList">
+          <input type="search" id="q" class="input" placeholder="Szukaj: nazwa, producent, kolekcja…" aria-label="Szukaj paneli">
+          <div class="filters">
+            <select id="fFamily" aria-label="Kolor"></select>
+            <select id="fStyle" aria-label="Styl"></select>
+            <select id="fMaker" aria-label="Producent"></select>
+            <select id="fFormat" aria-label="Format"></select>
+            <select id="fSort" aria-label="Sortowanie">
+              <option value="pop">Najpopularniejsze</option>
+              <option value="name">Nazwa A–Z</option>
+              <option value="light">Od najjaśniejszych</option>
+              <option value="dark">Od najciemniejszych</option>
+              <option value="len">Najdłuższe deski</option>
+            </select>
+            <label class="check"><input type="checkbox" id="fFav"> Ulubione</label>
+          </div>
+          <p class="muted small" id="resultCount"></p>
+          <div class="cards" id="cards"></div>
+          <p class="muted small">Katalog demonstracyjny — produkty i producenci są przykładowi.</p>
+        </div>
+        <div id="productDetail" hidden></div>
+      </div>
+
+      <div class="panel" data-panel="layout" role="tabpanel" hidden>
+        <div id="currentProduct" class="current-product"></div>
+        <h3>Wzór ułożenia</h3>
+        <div class="chips" id="patternChips"></div>
+        <h3>Kierunek desek</h3>
+        <div class="chips">
+          <button class="chip" data-angle="0">W poprzek</button>
+          <button class="chip" data-angle="90">W głąb pokoju</button>
+          <button class="chip" data-angle="45">Ukośnie</button>
+        </div>
+        <label class="field">Kąt <output data-for="angle"></output>
+          <input type="range" data-bind="angle" min="-90" max="90" step="1"></label>
+        <label class="field">Skala desek <output data-for="scale"></output>
+          <input type="range" data-bind="scale" min="0.5" max="2" step="0.01"></label>
+        <label class="field">Intensywność koloru <output data-for="intensity"></output>
+          <input type="range" data-bind="intensity" min="0.2" max="1.5" step="0.01"></label>
+        <label class="field">Zachowanie cieni i światła <output data-for="shadow"></output>
+          <input type="range" data-bind="shadow" min="0" max="1" step="0.01"></label>
+        <label class="check"><input type="checkbox" data-bind="realistic"> Odwzorowanie realistyczne (słoje, sęki, fazy)</label>
+        <h3>Widok z góry</h3>
+        <canvas id="topView" class="top-view" width="480" height="240"></canvas>
+        <details class="sub">
+          <summary>Skala i perspektywa</summary>
+          <p class="muted small">Wymiary niebieskiego prostokąta na podłodze. Ustal je np. na podstawie szerokości pokoju — od nich zależy wizualna wielkość desek.</p>
+          <div class="row">
+            <label class="field">Szerokość (m) <input type="number" class="input" data-bind="refSize.w" min="0.5" max="20" step="0.1"></label>
+            <label class="field">Głębokość (m) <input type="number" class="input" data-bind="refSize.d" min="0.5" max="30" step="0.1"></label>
+          </div>
+          <button class="btn small" data-tool="quad">Dopasuj perspektywę na zdjęciu</button>
+        </details>
+      </div>
+
+      <div class="panel" data-panel="interior" role="tabpanel" hidden>
+        <section class="group">
+          <label class="check head"><input type="checkbox" data-bind="wall.enabled"> Ściany</label>
+          <div class="swatches" data-colors="wall.color"></div>
+          <label class="field inline">Własny kolor <input type="color" data-bind="wall.color"></label>
+          <div class="chips" data-choice="wall.finish">
+            <button class="chip" data-value="mat">Mat</button>
+            <button class="chip" data-value="satyna">Satyna</button>
+            <button class="chip" data-value="połysk">Połysk</button>
+          </div>
+        </section>
+        <section class="group">
+          <label class="check head"><input type="checkbox" data-bind="door.enabled"> Drzwi</label>
+          <p class="muted small" data-needs-doors>Zaznacz drzwi w zakładce <a href="#" data-goto="areas-doors">Obszary → Drzwi</a>.</p>
+          <div class="swatches" data-colors="door.color"></div>
+          <label class="field inline">Własny kolor <input type="color" data-bind="door.color"></label>
+          <label class="field">Styl
+            <select class="input" data-bind="door.style">
+              <option value="original">Jak na zdjęciu (tylko kolor)</option>
+              <option value="smooth">Gładkie</option>
+              <option value="panel">Płycinowe</option>
+              <option value="grooved">Frezowane poziomo</option>
+              <option value="glass">Przeszklone</option>
+            </select></label>
+          <div class="chips" data-choice="door.material">
+            <button class="chip" data-value="paint">Lakier</button>
+            <button class="chip" data-value="wood">Okleina drewnopodobna</button>
+          </div>
+        </section>
+        <section class="group">
+          <label class="check head"><input type="checkbox" data-bind="frame.enabled"> Framugi (ościeżnice)</label>
+          <div class="swatches" data-colors="frame.color"></div>
+          <label class="field inline">Własny kolor <input type="color" data-bind="frame.color"></label>
+          <div class="chips" data-choice="frame.material">
+            <button class="chip" data-value="paint">Lakier</button>
+            <button class="chip" data-value="wood">Okleina drewnopodobna</button>
+          </div>
+          <label class="field">Szerokość framugi <output data-for="frame.width"></output>
+            <input type="range" data-bind="frame.width" min="0.03" max="0.2" step="0.005"></label>
+        </section>
+        <section class="group">
+          <h3>Światło i kontrast</h3>
+          <label class="field">Jasność <output data-for="light.brightness"></output>
+            <input type="range" data-bind="light.brightness" min="0.6" max="1.4" step="0.01"></label>
+          <label class="field">Temperatura (ciepłe ↔ zimne) <output data-for="light.temperature"></output>
+            <input type="range" data-bind="light.temperature" min="-1" max="1" step="0.01" class="reverse"></label>
+          <label class="field">Kontrast <output data-for="light.contrast"></output>
+            <input type="range" data-bind="light.contrast" min="0.7" max="1.3" step="0.01"></label>
+        </section>
+      </div>
+
+      <div class="panel" data-panel="areas" role="tabpanel" hidden>
+        <p class="muted small">Popraw wykryte obszary. Niebieski = podłoga, pomarańczowy = ściany. Meble i dywany wyłącz gumką, aby pozostały na wierzchu.</p>
+        <div class="tool-grid" id="toolGrid">
+          <button data-tool="masks">Podgląd obszarów</button>
+          <button data-tool="floor-add">Pędzel: podłoga</button>
+          <button data-tool="floor-erase">Gumka: podłoga</button>
+          <button data-tool="poly-add">Wielokąt: dodaj</button>
+          <button data-tool="poly-sub">Wielokąt: wytnij</button>
+          <button data-tool="wall-add">Pędzel: ściany</button>
+          <button data-tool="wall-erase">Gumka: ściany</button>
+          <button data-tool="quad">Perspektywa</button>
+          <button data-tool="doors" id="toolDoors">Drzwi i framugi</button>
+        </div>
+        <label class="field">Rozmiar pędzla <output id="brushOut"></output>
+          <input type="range" id="brushSize" min="6" max="200" step="1" value="48"></label>
+        <div class="row wrap">
+          <button class="btn small" id="btnAddDoor">+ Dodaj drzwi</button>
+          <button class="btn small" id="btnDelDoor">Usuń zaznaczone drzwi</button>
+          <button class="btn small" id="btnClearFloor">Wyczyść podłogę</button>
+          <button class="btn small" id="btnRedetect">Wykryj ponownie</button>
+        </div>
+        <p class="muted small" id="toolHint"></p>
+        <h3>Wynik analizy</h3>
+        <ul class="analysis" id="analysis"></ul>
+      </div>
+
+      <div class="panel" data-panel="variants" role="tabpanel" hidden>
+        <p class="muted small">Zapisz do 4 wariantów aranżacji i porównaj je obok siebie lub suwakiem.</p>
+        <div class="row wrap">
+          <button class="btn primary small" id="btnAddVariant">+ Zapisz bieżący jako wariant</button>
+          <button class="btn small" id="btnCompareGrid">Porównaj obok siebie</button>
+        </div>
+        <ul class="variants" id="variantList"></ul>
+      </div>
+    </aside>
+  </main>
+
+  <div class="processing" id="processing" hidden role="dialog" aria-modal="true" aria-labelledby="procTitle">
+    <div class="proc-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2 id="procTitle">Analizuję zdjęcie…</h2>
+      <ol class="proc-steps" id="procSteps"></ol>
+    </div>
+  </div>
+
+  <dialog id="camDialog" class="dialog">
+    <video autoplay playsinline muted></video>
+    <div class="row end">
+      <button class="btn" data-cam="cancel">Anuluj</button>
+      <button class="btn primary" data-cam="shoot">Zrób zdjęcie</button>
+    </div>
+  </dialog>
+
+  <dialog id="compareDialog" class="dialog wide">
+    <div class="row between"><h2>Porównanie wariantów</h2><button class="btn" data-close>Zamknij</button></div>
+    <div class="compare-grid" id="compareGrid"></div>
+  </dialog>
+
+  <dialog id="saveDialog" class="dialog">
+    <form method="dialog">
+      <h2>Zapisz projekt</h2>
+      <label class="field">Nazwa <input class="input" id="projectName" required maxlength="80"></label>
+      <p class="muted small">Projekt zapisuje się tylko w tej przeglądarce (na tym urządzeniu).</p>
+      <div class="row end">
+        <button class="btn" value="cancel" formnovalidate>Anuluj</button>
+        <button class="btn primary" value="ok">Zapisz</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
